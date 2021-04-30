@@ -51,4 +51,3 @@ class RLLocalPlanner(LocalPlanner):
             self.way_points_queue.append(next_waypoint)
             control = self.controller.run_in_series(next_waypoint=next_waypoint)
             return control
-

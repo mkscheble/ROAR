@@ -1,5 +1,5 @@
 import numpy as np
-from ROAR.planning_module.local_planner.simple_waypoint_following_local_planner import SimpleWaypointFollowingLocalPlanner
+from ROAR.planning_module.local_planner.loop_simple_waypoint_following_local_planner import LoopSimpleWaypointFollowingLocalPlanner
 from ROAR.planning_module.local_planner.local_planner import LocalPlanner
 from ROAR.utilities_module.data_structures_models import Transform
 from ROAR.utilities_module.vehicle_models import Vehicle, VehicleControl
@@ -18,7 +18,7 @@ import json
 from pathlib import Path
 from collections import deque
 
-class DynamicWindowsApproach(SimpleWaypointFollowingLocalPlanner):
+class DynamicWindowsApproach(LoopSimpleWaypointFollowingLocalPlanner):
     def __init__(
             self,
             agent: Agent,
@@ -33,7 +33,7 @@ class DynamicWindowsApproach(SimpleWaypointFollowingLocalPlanner):
             controller: Control module used
         """
         super().__init__(agent=self.agent, controller=self.controller, mission_planner=self.agent.mission_planner,
-                         behavior_planner=self.agent.behavior_planner, closeness_threshold=0)
+                         behavior_planner=self.agent.behavior_planner, closeness_threshold=1)
         self.logger = logging.getLogger("DynamicsWindowsApproach")
         self.logger.debug("Dynamics Windows Approach Initiated")
 

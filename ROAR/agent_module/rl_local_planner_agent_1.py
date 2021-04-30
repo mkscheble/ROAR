@@ -1,7 +1,7 @@
 from ROAR.agent_module.agent import Agent
 from pathlib import Path
 from ROAR.control_module.pid_controller import PIDController
-from ROAR.planning_module.local_planner.rl_local_planner import RLLocalPlanner
+from ROAR.planning_module.local_planner.rl_local_planner_1 import RLLocalPlanner
 from ROAR.planning_module.behavior_planner.behavior_planner import BehaviorPlanner
 from ROAR.planning_module.mission_planner.waypoint_following_mission_planner import WaypointFollowingMissionPlanner
 from ROAR.utilities_module.data_structures_models import SensorsData
@@ -36,8 +36,8 @@ class RLLocalPlannerAgent(Agent):
             behavior_planner=self.behavior_planner,
             closeness_threshold=1.5
         )
-        self.absolute_maximum_map_size, self.map_padding = 1000, 40
-        self.occupancy_map = OccupancyGridMap(absolute_maximum_map_size=self.absolute_maximum_map_size,
+        self.absolute_maximum_map_size, self.map_padding = 800, 40
+        self.occupancy_map = OccupancyGridMap(absolute_maximum_map_size=800,
                                               world_coord_resolution=1,
                                               occu_prob=0.99,
                                               max_points_to_convert=10000,

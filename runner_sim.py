@@ -36,6 +36,7 @@ if __name__ == "__main__":
                         datefmt="%H:%M:%S",
                         level=logging.DEBUG)
     import warnings
+
     warnings.filterwarnings("ignore", module="carla")
     main()
 
