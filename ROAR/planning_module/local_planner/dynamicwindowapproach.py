@@ -1,5 +1,5 @@
 import numpy as np
-
+from ROAR.planning_module.local_planner.simple_waypoint_following_local_planner import SimpleWaypointFollowingLocalPlanner
 from ROAR.planning_module.local_planner.local_planner import LocalPlanner
 from ROAR.utilities_module.data_structures_models import Transform
 from ROAR.utilities_module.vehicle_models import Vehicle, VehicleControl
@@ -13,73 +13,83 @@ from ROAR.utilities_module.errors import (
     AgentException,
 )
 from ROAR.agent_module.agent import Agent
+# from ROAR.agent_module.mark_agent import MarkAgent
 import json
 from pathlib import Path
 from collections import deque
 
-class DynamicsWindowsApproach(LocalPlanner):
+class DynamicWindowsApproach(SimpleWaypointFollowingLocalPlanner):
     def __init__(
             self,
             agent: Agent,
-            controller: Controller,
+            controller: Controller
     ):
+        self.agent = agent
+        self.controller = controller
         """
-        Initialize Simple Waypoint Following Planner
+        Initialize Dynamics Windows Approach Planner
         Args:
             agent: newest agent state
             controller: Control module used
         """
-        super().__init__(agent=agent, controller=controller)
+        super().__init__(agent=self.agent, controller=self.controller, mission_planner=self.agent.mission_planner,
+                         behavior_planner=self.agent.behavior_planner, closeness_threshold=0)
         self.logger = logging.getLogger("DynamicsWindowsApproach")
         self.logger.debug("Dynamics Windows Approach Initiated")
-        self.way_points_queue = deque(maxlen=10)
 
-    def is_done(self) -> bool:
-        """
-        If there are nothing in self.way_points_queue,
-        that means you have finished a lap, you are done
-
-        Returns:
-            True if Done, False otherwise
-        """
-        return False
 
     def run_in_series(self) -> VehicleControl:
-
-        vehicle_transform = self.agent.vehicle.transform.to_array()[1]
-        print(vehicle_transform)
-        vehicle_velo = self.agent.vehicle.transform.to_array()[0]
-        vehicle_control = self.agent.vehicle.transform.to_array()[2]
-        max_speed = self.agent.agent_settings.max_speed
-        # goal = self.way_points_queue[0] need goal points!!!!
-
-        dynamic_window = self.calc_dynamic_window(self, vehicle_velo, vehicle_control, vehicle_transform, max_speed)
-        #goal is an [x,y] position
-        u, trajectory = self.calc_control_and_trajectory(dynamic_window, vehicle_velo, vehicle_control, vehicle_transform, goal, max_speed)  # need to find goal
-
-        # for i in np.arange(len(trajectory) - 1):
-        # control should just be a steering and longitude velocity
-        next_waypoint = trajectory[:,-1]
-
-        control = self.controller.run_in_series(next_waypoint=next_waypoint)
-        return control
+        simplewaypointcontrol, targetwaypoint = super().run_in_series_for_dwa() # Gives control/target waypoint that the thinks should do next from simple_waypoint_following_local_planner
+        # print("simplewaypointcontrol ", simplewaypointcontrol, targetwaypoint)
+        #
+        vehicle_transform = self.agent.vehicle.transform
+        # print("position", vehicle_transform)
+        vehicle_velo = self.agent.vehicle.velocity #seems like the -y direction is positive forward velocity?
+        vehicle_control = self.agent.vehicle.control  # this is the PREVIOUS control
+        # print("vehicle_transform", vehicle_transform)
+        # print("vehicle_velo", vehicle_velo)
+        # print("vehicle_control", vehicle_control)
+        max_speed = self.agent.agent_settings.max_speed # 20.0
+        # dynamic_window = self.calc_dynamic_window(vehicle_velo, vehicle_control, vehicle_transform, max_speed)
+        curr_obstacle_map = self.agent.occupancy_map._map
+        print(curr_obstacle_map)
+        #
+        # #goal is an [x,y] position
+        # u, trajectory = self.calc_control_and_trajectory(dynamic_window, vehicle_velo, vehicle_control, vehicle_transform, target_point, max_speed)  # need to find goal
+        #
+        # # for i in np.arange(len(trajectory) - 1):
+        # # control should just be a steering and longitude velocity
+        # next_waypoint = trajectory[:,-1] # x_y= trajectory[:,-1][:2] == [x, y] -> next_waypoint = Transform(location=Location(x=x_y[0], y=0,z=x_y[1]))
+        # next_waypoint = target_point
+        # control = self.controller.run_in_series(next_waypoint=next_waypoint)
+        # return control
+        return simplewaypointcontrol
 
     def calc_dynamic_window(self, vehicle_velo, vehicle_control, vehicle_transform, max_speed):   #i think i need help calculating this
         # Dynamic window from robot specification, I think they cap the inputs to the throttle and steering at -1 and 1 respectively
         Vs = [0, max_speed,
-              -1, 1]
+              -1, 1]   # max speed is 20.0
         # Vs = [config.min_speed, config.max_speed,
         #       -config.max_yaw_rate, config.max_yaw_rate]
         # Dynamic window from motion model
         dt = 0.25
 
         # x = initial state [x(m), y(m), yaw(rad), v(m/s), omega(rad/s)]
-        Vd = [x[3] - config.max_accel * dt,
-              x[3] + config.max_accel * dt,
-              x[4] - config.max_delta_yaw_rate * dt,
-              x[4] + config.max_delta_yaw_rate * dt]
 
-        #  [v_min, v_max, yaw_rate_min, yaw_rate_max]
+        Vd = [vehicle_velo[1] - 3 * dt,
+              vehicle_velo[1] + 3 * dt,
+              vehicle_control[0] - 0.69 * dt,
+              vehicle_control[0] + 0.69 * dt]
+        if Vd[2] > 1:
+            Vd[2] = 1
+        if Vd[2] < -1:
+            Vd[2] = -1
+        if Vd[3] > 1:
+            Vd[3] = 1
+        if Vd[3] < -1:
+            Vd[3] = -1
+
+
         dw = [max(Vs[0], Vd[0]), min(Vs[1], Vd[1]), max(Vs[2], Vd[2]), min(Vs[3], Vd[3])]
 
         return dw
@@ -94,6 +104,8 @@ class DynamicsWindowsApproach(LocalPlanner):
         initial_state = [x, y, yaw, vehicle_velo, steer]  #check that yaw is in radians!!!!!!
         best_trajectory = np.array(initial_state)
 
+        # curr_obstacle_map = self.agent.occupancy_map.get_map(self.agent.vehicle.transform, view_size=(200, 200))
+
         # x = initial state [x(m), y(m), yaw(rad), v(m/s), omega(rad/s)]
         for v in np.arange(dw[0], dw[1], 0.01):
             for y in np.arange(dw[2], dw[3], 0.01):
@@ -107,7 +119,7 @@ class DynamicsWindowsApproach(LocalPlanner):
 
                 to_goal_cost = to_goal_cost_gain * self.calc_to_goal_cost(trajectory, goal)
                 speed_cost = speed_cost_gain * (max_speed - trajectory[-1, 3])
-                ob_cost = obstacle_cost_gain * self.calc_obstacle_cost(trajectory, obstacle)    #how to get obstacles
+                ob_cost = obstacle_cost_gain * self.calc_obstacle_cost(trajectory, curr_obstacle_map)    #how to get obstacles
 
                 final_cost = to_goal_cost + speed_cost + ob_cost
 
@@ -128,31 +140,31 @@ class DynamicsWindowsApproach(LocalPlanner):
         dx = trajectory[:, 0] - ox[:, None]
         dy = trajectory[:, 1] - oy[:, None]
         r = np.hypot(dx, dy)
-
-        if config.robot_type == RobotType.rectangle:
-            yaw = trajectory[:, 2]
-            rot = np.array([[np.cos(yaw), -np.sin(yaw)], [np.sin(yaw), np.cos(yaw)]])
-            rot = np.transpose(rot, [2, 0, 1])
-            local_ob = ob[:, None] - trajectory[:, 0:2]
-            local_ob = local_ob.reshape(-1, local_ob.shape[-1])
-            local_ob = np.array([local_ob @ x for x in rot])
-            local_ob = local_ob.reshape(-1, local_ob.shape[-1])
-            upper_check = local_ob[:, 0] <= config.robot_length / 2
-            right_check = local_ob[:, 1] <= config.robot_width / 2
-            bottom_check = local_ob[:, 0] >= -config.robot_length / 2
-            left_check = local_ob[:, 1] >= -config.robot_width / 2
-            if (np.logical_and(np.logical_and(upper_check, right_check),
-                               np.logical_and(bottom_check, left_check))).any():
-                return float("Inf")
-        elif config.robot_type == RobotType.circle:
-            if np.array(r <= config.robot_radius).any():
-                return float("Inf")
+        #
+        # if config.robot_type == RobotType.rectangle:
+        #     yaw = trajectory[:, 2]
+        #     rot = np.array([[np.cos(yaw), -np.sin(yaw)], [np.sin(yaw), np.cos(yaw)]])
+        #     rot = np.transpose(rot, [2, 0, 1])
+        #     local_ob = ob[:, None] - trajectory[:, 0:2]
+        #     local_ob = local_ob.reshape(-1, local_ob.shape[-1])
+        #     local_ob = np.array([local_ob @ x for x in rot])
+        #     local_ob = local_ob.reshape(-1, local_ob.shape[-1])
+        #     upper_check = local_ob[:, 0] <= config.robot_length / 2
+        #     right_check = local_ob[:, 1] <= config.robot_width / 2
+        #     bottom_check = local_ob[:, 0] >= -config.robot_length / 2
+        #     left_check = local_ob[:, 1] >= -config.robot_width / 2
+        #     if (np.logical_and(np.logical_and(upper_check, right_check),
+        #                        np.logical_and(bottom_check, left_check))).any():
+        #         return float("Inf")
+        # elif config.robot_type == RobotType.circle:
+        #     if np.array(r <= config.robot_radius).any():
+        #         return float("Inf")
 
         min_r = np.min(r)
         return 1.0 / min_r  # OK
 
     def calc_to_goal_cost(trajectory, goal):
-        """
+        """zs
             calc to goal cost with angle difference
         """
 
@@ -191,9 +203,5 @@ class DynamicsWindowsApproach(LocalPlanner):
             time += 0.01
 
         return trajectory
-
-
-
-
 
 
