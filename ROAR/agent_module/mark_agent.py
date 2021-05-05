@@ -28,18 +28,21 @@ class MarkAgent(Agent):
             agent=self,
             controller=self.pid_controller)
 
-        self.occupancy_map = OccupancyGridMap(absolute_maximum_map_size=1000,
+        occu_map_file_path = Path("./ROAR_Sim/data/easy_map_cleaned_global_occu_map.npy")
+        self.occupancy_map = OccupancyGridMap(absolute_maximum_map_size=550,
                                               world_coord_resolution=1,
                                               occu_prob=0.99,
                                               max_points_to_convert=5000,
                                               threaded=True)
-        self.obstacle_from_depth_detector = ObstacleFromDepth(agent=self,
-                                                              threaded=True,
-                                                              max_detectable_distance=0.3,
-                                                              max_points_to_convert=10000,
-                                                              min_obstacle_height=2)
-        self.add_threaded_module(self.obstacle_from_depth_detector)
-        self.add_threaded_module(self.occupancy_map)
+        self.occupancy_map.load_from_file(file_path=occu_map_file_path)
+
+        # self.obstacle_from_depth_detector = ObstacleFromDepth(agent=self,
+        #                                                       threaded=True,
+        #                                                       max_detectable_distance=0.3,
+        #                                                       max_points_to_convert=10000,
+        #                                                       min_obstacle_height=2)
+        # self.add_threaded_module(self.obstacle_from_depth_detector)
+        # self.add_threaded_module(self.occupancy_map)
 
 
 
@@ -53,7 +56,7 @@ class MarkAgent(Agent):
             points = self.kwargs[option]
             self.occupancy_map.update_async(points)
             self.occupancy_map.visualize()
-            # self.occupancy_map.get_map()
+            self.occupancy_map.get_map()
 
         return control
 

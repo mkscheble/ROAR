@@ -35,7 +35,9 @@ class PIDController(Controller):
     def run_in_series(self, next_waypoint: Transform, **kwargs) -> VehicleControl:
         throttle = self.long_pid_controller.run_in_series(next_waypoint=next_waypoint,
                                                           target_speed=kwargs.get("target_speed", self.max_speed))
+        # print("next_waypoint ->", next_waypoint )
         steering = self.lat_pid_controller.run_in_series(next_waypoint=next_waypoint)
+        # print("steering: ", steering)
         return VehicleControl(throttle=throttle, steering=steering)
 
     @staticmethod
@@ -120,7 +122,6 @@ class LatPIDController(Controller):
                 next_waypoint.location.z - v_begin[2],
             ]
         )
-
         v_vec_normed = v_vec / np.linalg.norm(v_vec)
         w_vec_normed = w_vec / np.linalg.norm(w_vec)
         error = np.arccos(v_vec_normed @ w_vec_normed.T)
@@ -141,4 +142,5 @@ class LatPIDController(Controller):
         lat_control = float(
             np.clip((k_p * error) + (k_d * _de) + (k_i * _ie), self.steering_boundary[0], self.steering_boundary[1])
         )
+        # print("lat_control -> ", lat_control)
         return lat_control

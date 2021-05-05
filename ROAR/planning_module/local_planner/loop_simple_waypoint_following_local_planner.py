@@ -95,8 +95,9 @@ class LoopSimpleWaypointFollowingLocalPlanner(LocalPlanner):
             else:
                 break
         target_waypoint = self.way_points_queue[self._curr_waypoint_index]
-        print(target_waypoint)
+        # print(target_waypoint)
         control: VehicleControl = self.controller.run_in_series(next_waypoint=target_waypoint)
+        # control = 0
         return control
 
     def run_in_series_for_dwa(self) -> VehicleControl:
@@ -127,8 +128,10 @@ class LoopSimpleWaypointFollowingLocalPlanner(LocalPlanner):
             else:
                 break
         target_waypoint = self.way_points_queue[self._curr_waypoint_index]
-        print(target_waypoint)
-        control: VehicleControl = self.controller.run_in_series(next_waypoint=target_waypoint)
+        # print(target_waypoint) c
+
+        # control: VehicleControl = self.controller.run_in_series(next_waypoint=target_waypoint)
+        control = 0
         return control, target_waypoint
 
     def set_closeness_threhold(self, config: dict):
