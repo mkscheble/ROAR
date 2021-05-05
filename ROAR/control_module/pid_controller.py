@@ -58,7 +58,8 @@ class LongPIDController(Controller):
         super().__init__(agent, **kwargs)
         self.config = config
         self.max_speed = max_speed
-        self.throttle_boundary = throttle_boundary
+        x = list(throttle_boundary)
+        self.throttle_boundary = tuple([x[0]/1.5, x[1]/1.5])
         self._error_buffer = deque(maxlen=10)
 
         self._dt = dt

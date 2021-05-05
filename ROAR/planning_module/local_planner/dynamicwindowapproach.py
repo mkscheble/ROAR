@@ -40,25 +40,18 @@ class DynamicWindowsApproach(LoopSimpleWaypointFollowingLocalPlanner):
 
     def run_in_series(self) -> VehicleControl:
         simplewaypointcontrol, targetwaypoint = super().run_in_series_for_dwa() # Gives control/target waypoint that the thinks should do next from simple_waypoint_following_local_planner
-        # if self.old_waypoint is None:
-        #     self.old_waypoint = [targetwaypoint.location.x, targetwaypoint.location.z]
+        if self.old_waypoint is None:
+            self.old_waypoint = [targetwaypoint.location.x, targetwaypoint.location.z]
         vehicle_transform = self.agent.vehicle.transform
         vehicle_velo = self.agent.vehicle.velocity
         vehicle_control = self.agent.vehicle.control  # this is the PREVIOUS control
         max_speed = self.agent.agent_settings.max_speed # 20.0
-        # dynamic_window = self.calc_dynamic_window(vehicle_velo, vehicle_control, max_speed)
-        dynamic_window = 0
-        # # print("dynamicwindow", dynamic_window)
-        next_waypoint = self.calc_control_and_trajectory(dynamic_window, vehicle_velo, vehicle_control, vehicle_transform, targetwaypoint, max_speed)
-        # #
+        next_waypoint = self.calc_control_and_trajectory(vehicle_velo, vehicle_control, vehicle_transform, targetwaypoint, max_speed)
 
         formatted_nw = Transform(location = Location(x = next_waypoint[0], y = 0, z = next_waypoint[1]), rotation = targetwaypoint.rotation)
-        #
         control: VehicleControl = self.controller.run_in_series(next_waypoint=formatted_nw)
-        # # print("\n")
-        # # print("formatted_nw", formatted_nw, "\n")
         print("targetwaypoint", simplewaypointcontrol, targetwaypoint, "\n")
-        # # print("\n")
+
         return control
         # return simplewaypointcontrol
     def calc_dynamic_window(self, vehicle_velo, vehicle_control, max_speed):
@@ -86,53 +79,59 @@ class DynamicWindowsApproach(LoopSimpleWaypointFollowingLocalPlanner):
         dw = Vs
         return dw
 
-    def calc_control_and_trajectory(self, dw, vehicle_velo, vehicle_control, vehicle_transform, goal, max_speed):
+    def calc_control_and_trajectory(self, vehicle_velo, vehicle_control, vehicle_transform, goal, max_speed):
         min_cost = np.inf
         waypoint = goal
         steer = vehicle_control.steering
         yvelo = vehicle_velo.y
+        # speed = 3.6 * np.sqrt(vehicle_velo.x ** 2 + vehicle_velo.y ** 2 + vehicle_velo.z ** 2)
+
         x, z, yaw = vehicle_transform.location.x,vehicle_transform.location.z, vehicle_transform.rotation.yaw
         initial_state = [x, z, np.deg2rad(yaw), yvelo, steer]  #yaw given in degrees so change to radians, negative y is forward direction
-        obstacles = self.agent.occupancy_map.get_map(goal, view_size=(100, 100),  vehicle_value = -10)
+        obstacles = self.agent.occupancy_map.get_map(goal, view_size=(150, 150),  vehicle_value = 0)
         # x = initial state [x(m), y(m), yaw(rad), v(m/s), omega(rad/s)]
-        for v in np.arange(0.01, 7,1): # v is velocity
-            for y in np.arange(-180, 180, 30):  # y is steering rate
+        dw = [0.02, 5, -180, 180]
+        for v in np.arange(dw[0], dw[1], 0.5): # v is velocity
+            for y in np.arange(dw[2], dw[3], 30):  # y is steering rate
                 estimated_goal = self.predict_trajectory(initial_state, v, np.deg2rad(y))
 
                 to_goal_cost_gain = 1.0 #0.15
                 # speed_cost_gain = 0.1
-                obstacle_cost_gain = 0.0
-                # smooth_cost_gain = 0.50
-        #
+                obstacle_cost_gain = 60.0
+                smooth_cost_gain = 0.5
                 to_goal_cost = to_goal_cost_gain * self.calc_to_goal_cost(goal, estimated_goal)
                 # speed_cost = speed_cost_gain * (max_speed - estimated_goal[3])
                 ob_cost = obstacle_cost_gain * self.calc_obstacle_cost(estimated_goal, obstacles)    #how to get obstacles
-                # smooth_cost = smooth_cost_gain * self.calc_smooth_cost(estimated_goal)
-                final_cost = to_goal_cost
-                # print("estimatedgoal", estimated_goal, final_cost)
-
-        #         print("final cost", final_cost)
-        #         # search for minimum cost
+                smooth_cost = smooth_cost_gain * self.calc_smooth_cost(estimated_goal, [x, y])
+                # print("to_goalcost->", to_goal_cost, "obcost->", ob_cost, "smooth cost", smooth_cost)
+                final_cost = to_goal_cost + ob_cost + smooth_cost
+                # search for minimum cost
+                # if ob_cost >1:
+                #     print("obasdflkjasdlfkj", ob_cost)
+                #     print("\n")
                 if min_cost > final_cost:
                     min_cost = final_cost
                     waypoint = estimated_goal
+                    fob_cost = ob_cost
+                    fsmooth_cost = smooth_cost
+                    fgoal_cost = to_goal_cost
                 # print("newmin", min_cost)
-        print("dw", dw)
+
         print("chosen estimated goal", waypoint)
-        # print(self.agent.occupancy_map.get_map(Transform(location=Location(x=estimated_goal[0], y=0, z=estimated_goal[1])), view_size=(8, 4)))
         print("actual", goal)
-        print("min_cost", min_cost)
-        print("called")
-        # self.old_waypoint = waypoint[0:2]
+        print("to_goalcost->", fgoal_cost, "obcost->", fob_cost, "smooth cost",fsmooth_cost)
+        print("min_cost", min_cost, "\n")
+        self.old_waypoint = waypoint[0:2]
         return waypoint
 
-    def calc_smooth_cost(self, estimated_goal):
+    def calc_smooth_cost(self, estimated_goal, current):
         """
         calc obstacle cost inf: collision
         """
         # print("estimatedgoal", estimated_goal)
         # print("old", self.old_waypoint)
-        cost = np.linalg.norm(self.old_waypoint - estimated_goal[0:2])
+        dx, dy = current - estimated_goal[0:2]
+        cost = np.sqrt((dx*dx))
         # print(cost)
         return cost
 
@@ -140,8 +139,21 @@ class DynamicWindowsApproach(LoopSimpleWaypointFollowingLocalPlanner):
         """
         calc obstacle cost inf: collision
         """
-        x = obstacles[0:2, :]
-        return 0
+        x, y = round(estimated_goal[0]), round(estimated_goal[1])
+        w = 15
+        if x-w < 0:
+            x = w
+        elif x+w > 149:
+            x = 149-w
+        if y - w < 0:
+            y = w
+        elif y + w > 149:
+            y = 149-w
+        smallmap = obstacles[x-w: x+w, y-w:y+w]
+        summap = np.mean(smallmap)
+        # print(smallmap)
+        # print("sum:", summap, "\n")
+        return summap
 
 
     def calc_to_goal_cost(self, goal, estimated_goal):
