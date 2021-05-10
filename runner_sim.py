@@ -20,6 +20,7 @@ def main():
                                npc_agent_class=PurePursuitAgent)
     try:
         my_vehicle = carla_runner.set_carla_world()
+        "change this for different agents"
         agent = MarkAgent(vehicle=my_vehicle, agent_settings=agent_config)
 
         # agent = RecordingAgent(vehicle=my_vehicle, agent_settings=agent_config)

@@ -46,13 +46,19 @@ class DynamicWindowsApproach(LoopSimpleWaypointFollowingLocalPlanner):
         vehicle_velo = self.agent.vehicle.velocity
         vehicle_control = self.agent.vehicle.control  # this is the PREVIOUS control
         max_speed = self.agent.agent_settings.max_speed # 20.0
-        next_waypoint = self.calc_control_and_trajectory(vehicle_velo, vehicle_control, vehicle_transform, targetwaypoint, max_speed)
+        try:
+            next_waypoint = self.calc_control_and_trajectory(vehicle_velo, vehicle_control, vehicle_transform,
+                                                             targetwaypoint, max_speed)
 
-        formatted_nw = Transform(location = Location(x = next_waypoint[0], y = 0, z = next_waypoint[1]), rotation = targetwaypoint.rotation)
-        control: VehicleControl = self.controller.run_in_series(next_waypoint=formatted_nw)
-        print("targetwaypoint", simplewaypointcontrol, targetwaypoint, "\n")
+            formatted_nw = Transform(location=Location(x=next_waypoint[0], y=0, z=next_waypoint[1]),
+                                     rotation=targetwaypoint.rotation)
+            control: VehicleControl = self.controller.run_in_series(next_waypoint=formatted_nw)
+            return control
+        except:
+            simplewaypointcontrol: VehicleControl = self.controller.run_in_series(next_waypoint=targetwaypoint)
+            return simplewaypointcontrol
+        # print("targetwaypoint", simplewaypointcontrol, targetwaypoint, "\n")
 
-        return control
         # return simplewaypointcontrol
     def calc_dynamic_window(self, vehicle_velo, vehicle_control, max_speed):
         # Vs = [config.min_speed, config.max_speed, -config.max_yaw_rate, config.max_yaw_rate]
@@ -81,7 +87,7 @@ class DynamicWindowsApproach(LoopSimpleWaypointFollowingLocalPlanner):
 
     def calc_control_and_trajectory(self, vehicle_velo, vehicle_control, vehicle_transform, goal, max_speed):
         min_cost = np.inf
-        waypoint = goal
+        waypoint = [goal.location.x, goal.location.z, 0,0,0]
         steer = vehicle_control.steering
         yvelo = vehicle_velo.y
         # speed = 3.6 * np.sqrt(vehicle_velo.x ** 2 + vehicle_velo.y ** 2 + vehicle_velo.z ** 2)
@@ -94,16 +100,17 @@ class DynamicWindowsApproach(LoopSimpleWaypointFollowingLocalPlanner):
         for v in np.arange(dw[0], dw[1], 0.5): # v is velocity
             for y in np.arange(dw[2], dw[3], 30):  # y is steering rate
                 estimated_goal = self.predict_trajectory(initial_state, v, np.deg2rad(y))
-
+                # print(estimated_goal)
                 to_goal_cost_gain = 1.0 #0.15
                 # speed_cost_gain = 0.1
                 obstacle_cost_gain = 60.0
-                smooth_cost_gain = 0.5
+                smooth_cost_gain = 0.5 #0.5
                 to_goal_cost = to_goal_cost_gain * self.calc_to_goal_cost(goal, estimated_goal)
                 # speed_cost = speed_cost_gain * (max_speed - estimated_goal[3])
                 ob_cost = obstacle_cost_gain * self.calc_obstacle_cost(estimated_goal, obstacles)    #how to get obstacles
+                # ob_cost = 0
                 smooth_cost = smooth_cost_gain * self.calc_smooth_cost(estimated_goal, [x, y])
-                # print("to_goalcost->", to_goal_cost, "obcost->", ob_cost, "smooth cost", smooth_cost)
+                print("to_goalcost->", to_goal_cost, "obcost->", ob_cost, "smooth cost", smooth_cost)
                 final_cost = to_goal_cost + ob_cost + smooth_cost
                 # search for minimum cost
                 # if ob_cost >1:
@@ -119,7 +126,7 @@ class DynamicWindowsApproach(LoopSimpleWaypointFollowingLocalPlanner):
 
         print("chosen estimated goal", waypoint)
         print("actual", goal)
-        print("to_goalcost->", fgoal_cost, "obcost->", fob_cost, "smooth cost",fsmooth_cost)
+        # print("to_goalcost->", fgoal_cost, "obcost->", fob_cost, "smooth cost",fsmooth_cost)
         print("min_cost", min_cost, "\n")
         self.old_waypoint = waypoint[0:2]
         return waypoint
